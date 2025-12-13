@@ -1,20 +1,49 @@
 <div class="container">
   <header class="debate-header">
-  <div class="left-nav">
-    <a routerLink="/" class="back-link">&larr; Topics</a>
-  </div>
-  
-  <h2>Debate Chamber</h2>
+    
+    <!-- Retour -->
+    <a routerLink="/" class="icon-btn" title="Exit without saving">✕</a>
 
-  <!-- Sélecteur de Joueur -->
-  <div class="user-switcher">
-    <label>Speaking as:</label>
-    <select (change)="switchUser($any($event.target).value)" [value]="username">
-      <option value="Alice">Alice</option>
-      <option value="Bob">Bob</option>
-    </select>
-  </div>
-</header>
+    <!-- Score -->
+    <div class="score-board">
+      <div class="score-side side-a" [class.leading]="scoreA > scoreB">
+        <span class="score-name">{{ playerA }}</span>
+        <span class="score-num">{{ scoreA }}</span>
+      </div>
+      <div class="vs-badge">VS</div>
+      <div class="score-side side-b" [class.leading]="scoreB > scoreA">
+        <span class="score-num">{{ scoreB }}</span>
+        <span class="score-name">{{ playerB }}</span>
+      </div>
+    </div>
+
+    <!-- Switcher + Bouton FINISH -->
+    <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+      
+      <!-- Switcher -->
+      <div class="user-toggle">
+        <button 
+          class="toggle-btn" 
+          [class.active]="username === playerA"
+          (click)="switchUser(playerA)">
+          {{ playerA }}
+        </button>
+        <button 
+          class="toggle-btn" 
+          [class.active]="username === playerB"
+          (click)="switchUser(playerB)">
+          {{ playerB }}
+        </button>
+      </div>
+
+      <!-- BOUTON FINISH (NOUVEAU) -->
+      <button class="btn-finish" (click)="finishDebate()">
+        🏁 FINISH
+      </button>
+
+    </div>
+
+  </header>
 
   <div class="message-container" #messageContainer>
     <div *ngIf="messages.length === 0" class="loading">

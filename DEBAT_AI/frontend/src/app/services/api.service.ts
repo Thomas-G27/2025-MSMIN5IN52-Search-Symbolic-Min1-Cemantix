@@ -26,4 +26,8 @@ export class ApiService {
   getSuggestions(debateId: number, targetMessageId: number): Observable<SuggestionResponse> {
     return this.http.get<SuggestionResponse>(`${this.baseUrl}/debates/${debateId}/suggestions/${targetMessageId}`);
   }
+
+  resetDebate(debateId: number): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/debates/${debateId}/messages`);
+  }
 }

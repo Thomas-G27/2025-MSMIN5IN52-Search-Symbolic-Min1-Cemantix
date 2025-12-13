@@ -14,7 +14,11 @@ import { Debate } from '../../models';
 })
 export class TopicsListComponent implements OnInit {
   debates: Debate[] = [];
-  username: string = '';
+  
+  // Gestion de la modale de configuration
+  selectedDebate: Debate | null = null;
+  debaterA: string = 'Alice';
+  debaterB: string = 'Bob';
 
   constructor(private apiService: ApiService, private router: Router) { }
 
@@ -22,23 +26,31 @@ export class TopicsListComponent implements OnInit {
     this.apiService.getDebates().subscribe(data => {
       this.debates = data;
     });
-
-    // Persist username across sessions
-    const storedUsername = localStorage.getItem('username');
-    if (storedUsername) {
-      this.username = storedUsername;
-    }
   }
 
-  onUsernameChange(): void {
-    localStorage.setItem('username', this.username);
+  // 1. Ouvre la fenêtre de config quand on clique sur un sujet
+  openSetup(debate: Debate): void {
+    this.selectedDebate = debate;
   }
 
-  joinDebate(debateId: number): void {
-    if (!this.username.trim()) {
-      alert('Please enter a username to join a debate.');
+  // 2. Ferme la fenêtre
+  closeSetup(): void {
+    this.selectedDebate = null;
+  }
+
+  // 3. Lance le débat et sauvegarde les noms
+  startDebate(): void {
+    if (!this.selectedDebate || !this.debaterA.trim() || !this.debaterB.trim()) {
       return;
     }
-    this.router.navigate(['/debates', debateId]);
+
+    // On sauvegarde les noms pour la page suivante
+    localStorage.setItem('debaterA', this.debaterA);
+    localStorage.setItem('debaterB', this.debaterB);
+    
+    // Par défaut, c'est le joueur A qui commence
+    localStorage.setItem('username', this.debaterA);
+
+    this.router.navigate(['/debates', this.selectedDebate.id]);
   }
 }

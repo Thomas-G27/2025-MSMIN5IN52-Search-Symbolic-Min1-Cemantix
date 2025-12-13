@@ -234,3 +234,15 @@ async def get_suggestions(debate_id: int, target_message_id: int):
 @app.get("/")
 def read_root():
     return {"status": "Backend is running"}
+
+@app.delete("/api/debates/{debate_id}/messages")
+async def reset_debate(debate_id: int):
+    """
+    Supprime tous les messages d'un débat pour repartir de zéro.
+    """
+    db_pool = await get_pool()
+    async with db_pool.acquire() as connection:
+        # On supprime les messages liés à ce débat
+        await connection.execute("DELETE FROM messages WHERE debate_id = $1", debate_id)
+        
+    return {"status": "Debate reset successfully"}

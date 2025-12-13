@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { Router } from '@angular/router';
 
 import { ApiService } from '../../services/api.service';
 import { WebsocketService } from '../../services/websocket.service';
@@ -18,26 +19,44 @@ import { Message } from '../../models';
 export class DebateViewComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('messageContainer') private messageContainer!: ElementRef;
 
+  // Données de base
   messages: Message[] = [];
   newMessageContent: string = '';
   debateId: number = 0;
-  username: string = '';
-  private wsSubscription!: Subscription;
+  
+  // Gestion des Joueurs
+  username: string = ''; // L'utilisateur actuel (celui qui parle)
+  playerA: string = 'Alice';
+  playerB: string = 'Bob';
 
-  // --- NOUVEAUX ÉTATS POUR L'IA ---
-  winningIds: string[] = []; // Liste des IDs gagnants (Logique Tweety)
-  loadingSuggestionId: number | null = null; // Quel message charge une suggestion ?
-  suggestionsMap: { [key: number]: string[] } = {}; // Stocke les suggestions reçues
+  // Gestion du Score
+  scoreA: number = 0;
+  scoreB: number = 0;
+
+  // Gestion de l'IA et WebSocket
+  private wsSubscription!: Subscription;
+  winningIds: string[] = []; // Liste des IDs des arguments "Verts"
+  
+  // Gestion des Suggestions (Coach)
+  loadingSuggestionId: number | null = null;
+  suggestionsMap: { [key: number]: string[] } = {};
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private apiService: ApiService,
     private websocketService: WebsocketService
   ) { }
 
   ngOnInit(): void {
-    this.username = localStorage.getItem('username') || 'Anonymous';
+    // 1. Récupération des noms depuis le Setup (Page d'accueil)
+    this.playerA = localStorage.getItem('debaterA') || 'Alice';
+    this.playerB = localStorage.getItem('debaterB') || 'Bob';
     
+    // Par défaut, on prend le nom stocké, sinon le joueur A
+    this.username = localStorage.getItem('username') || this.playerA;
+    
+    // 2. Initialisation du débat
     this.route.paramMap.subscribe(params => {
       this.debateId = Number(params.get('id'));
       if (this.debateId) {
@@ -58,28 +77,33 @@ export class DebateViewComponent implements OnInit, OnDestroy, AfterViewChecked 
     this.scrollToBottom();
   }
 
+  // --- CHARGEMENT & WEBSOCKET ---
+
   loadInitialMessages(): void {
     this.apiService.getMessages(this.debateId).subscribe(data => {
       this.messages = data;
-      // Pour l'initialisation, on peut supposer que le dernier message contient l'état actuel
-      // ou attendre le prochain event WebSocket.
-      // Idéalement, le backend devrait renvoyer winningIds dans le GET initial aussi,
-      // mais sinon ça se mettra à jour au premier message reçu.
+      // Note: Idéalement le backend devrait renvoyer les winningIds ici aussi
+      // Mais sinon, ça se mettra à jour au prochain message
+      this.calculateScore(); 
     });
   }
 
   connectToWebSocket(): void {
     this.wsSubscription = this.websocketService.connect(this.debateId).subscribe({
       next: (message: Message) => {
-        // 1. Mettre à jour la liste globale des gagnants
+        // 1. Mise à jour de la logique (Qui gagne ?)
         if (message.current_winners) {
-          // On convertit tout en string pour comparer facilement
           this.winningIds = message.current_winners.map(id => String(id));
+          this.calculateScore(); // Recalcul du score en temps réel
         }
 
-        // 2. Ajouter le message s'il n'existe pas déjà
-        if (!this.messages.find(m => m.id === message.id)) {
+        // 2. Ajout du message (si pas déjà présent)
+        const exists = this.messages.find(m => m.id === message.id);
+        if (!exists) {
             this.messages.push(message);
+        } else {
+            // Si le message existe déjà (ex: update), on met à jour ses infos
+            Object.assign(exists, message);
         }
       },
       error: err => console.error('WebSocket error:', err),
@@ -95,17 +119,40 @@ export class DebateViewComponent implements OnInit, OnDestroy, AfterViewChecked 
     this.apiService.postMessage(this.debateId, this.newMessageContent, this.username)
       .subscribe(() => {
         this.newMessageContent = '';
+        // Le message s'affichera via le WebSocket
       });
   }
 
-  // --- NOUVELLES MÉTHODES ---
+  // --- LOGIQUE METIER (IA & SCORE) ---
 
-  // Vérifie si un message est gagnant (Vert)
+  // Change l'utilisateur actif (Header Switcher)
+  switchUser(user: string): void {
+    this.username = user;
+    localStorage.setItem('username', user);
+  }
+
+  // Calcule le score basé sur le nombre d'arguments "Verts" pour chaque camp
+  calculateScore(): void {
+    let countA = 0;
+    let countB = 0;
+
+    this.messages.forEach(msg => {
+      if (this.isWinner(msg.id)) {
+        if (msg.username === this.playerA) countA++;
+        if (msg.username === this.playerB) countB++;
+      }
+    });
+
+    this.scoreA = countA;
+    this.scoreB = countB;
+  }
+
+  // Vérifie si un message est gagnant (Tweety Logic)
   isWinner(msgId: number): boolean {
     return this.winningIds.includes(String(msgId));
   }
 
-  // Appelle l'IA pour avoir des idées
+  // Demande des suggestions à l'IA
   askForHelp(msgId: number): void {
     this.loadingSuggestionId = msgId;
     this.apiService.getSuggestions(this.debateId, msgId).subscribe({
@@ -126,8 +173,27 @@ export class DebateViewComponent implements OnInit, OnDestroy, AfterViewChecked 
     } catch(err) { }
   }
 
-  switchUser(newUser: string): void {
-  this.username = newUser;
-  localStorage.setItem('username', newUser);
-}
+  finishDebate(): void {
+    // 1. Déterminer le gagnant
+    let winnerName = 'Draw';
+    let message = 'It\'s a tie! Good game.';
+
+    if (this.scoreA > this.scoreB) {
+      winnerName = this.playerA;
+      message = `🏆 VICTORY! \n${this.playerA} wins the debate logically!`;
+    } else if (this.scoreB > this.scoreA) {
+      winnerName = this.playerB;
+      message = `🏆 VICTORY! \n${this.playerB} wins the debate logically!`;
+    }
+
+    // 2. Annoncer le résultat
+    if (confirm(`${message}\n\nDo you want to end this debate and reset the board?`)) {
+      
+      // 3. Vider le débat (Appel Backend)
+      this.apiService.resetDebate(this.debateId).subscribe(() => {
+        // 4. Retourner à l'accueil
+        this.router.navigate(['/']);
+      });
+    }
+  }
 }
