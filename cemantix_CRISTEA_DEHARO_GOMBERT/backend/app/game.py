@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # Chargement du modèle de langue (contient les vecteurs sémantiques)
 print("Chargement du modèle spaCy...")
 try:
-    nlp = spacy.load("fr_core_news_md")
+    nlp = spacy.load("fr_core_news_lg")
 except OSError:
     raise RuntimeError("Le modèle 'fr_core_news_md' n'est pas trouvé. Lancez: python -m spacy download fr_core_news_md")
 
